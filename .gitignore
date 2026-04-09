@@ -1,0 +1,21 @@
+# Data files (too large for git)
+data/*.csv
+
+# Model checkpoints
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Results (regenerated from notebooks)
+results/

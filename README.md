@@ -1,2 +1,0 @@
-# Toxic-Comment-Detection-in-Russian-Social-Media-Text-Using-Transformer-Based-Models
-This project develops and evaluates machine learning models for detecting toxic comments in Russian-language social media text. We compare classical approaches (TF-IDF with Logistic Regression and SVM) against modern transformer-based models (ruBERT and XLM-RoBERTa) on a public dataset of 14,412 annotated comments from Russian online platforms.
