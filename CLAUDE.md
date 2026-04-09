@@ -109,6 +109,12 @@ Expected F1 (toxic class): mBERT ~0.88-0.91, ruBERT ~0.90-0.92, XLM-RoBERTa ~0.9
 - GPU recommended. Works on Apple M1/M2 (MPS), NVIDIA GPU (CUDA), or CPU (slow).
 - M1 with 8GB RAM: use batch_size=8, max_length=128 (already configured).
 - If you get MPS out-of-memory errors, reduce BATCH_SIZE to 4.
+- 4 GB VRAM cards (e.g. GTX 1650): keep BATCH_SIZE=8, grad_accum=2; do NOT raise — fp16 + seq 128 already saturates the card.
+- **Better GPUs — increase batch size for faster training.** With more VRAM you can shorten wall-clock time substantially by raising `BATCH_SIZE` in `notebooks/03_transformers.ipynb` and dropping `gradient_accumulation_steps` to 1 in `src/transformers_train.py:get_training_args` (so the effective batch grows instead of staying at 16). Suggested settings:
+  - 8 GB VRAM (RTX 3060/4060, T4): `BATCH_SIZE=16`, `gradient_accumulation_steps=1` (effective batch 16, ~2× faster than the default)
+  - 12 GB VRAM (RTX 3060 12G, 4070): `BATCH_SIZE=32`, `gradient_accumulation_steps=1` (effective batch 32, consider raising lr to 3e-5)
+  - 16-24 GB VRAM (RTX 4080/4090, A10, A100): `BATCH_SIZE=64`, `gradient_accumulation_steps=1`, `lr=3e-5`, optionally `MAX_LENGTH=256` for slightly better F1
+  When raising the effective batch, scale learning rate roughly with `sqrt(new_batch / 16)` and re-check val F1 — large batches can underfit if lr is left at 2e-5.
 
 ### 6. Error Analysis — `notebooks/04_error_analysis.ipynb` (planned)
 
