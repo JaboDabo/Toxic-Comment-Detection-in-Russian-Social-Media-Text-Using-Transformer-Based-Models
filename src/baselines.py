@@ -1,5 +1,5 @@
 """
-Baseline models: TF-IDF + Logistic Regression / Linear SVM.
+Classical baseline models: TF-IDF + MNB / Logistic Regression / Linear SVM.
 """
 
 from sklearn.feature_extraction.text import TfidfVectorizer

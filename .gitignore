@@ -1,5 +1,5 @@
-# Data files (too large for git)
-data/*.csv
+# Data files (HuggingFace cache)
+data/
 
 # Model checkpoints
 models/

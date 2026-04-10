@@ -1,18 +1,13 @@
 """
-Transformer fine-tuning utilities for toxic comment classification.
-Supports ruBERT and XLM-RoBERTa.
+Transformer fine-tuning utilities for sentiment classification.
+Configured for mDeBERTa-v3-base on the KazSAnDRA dataset.
 """
 
 import os
 os.environ["USE_TF"] = "0"
 os.environ["USE_TORCH"] = "1"
 
-# Monkey-patch transformers to skip TF entirely (fixes Keras 3 conflict)
-import transformers.utils.import_utils as _tf_check
-_tf_check._tf_available = False
-
 import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from transformers import (
@@ -24,14 +19,14 @@ from transformers import (
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 
 RANDOM_SEED = 42
-LABEL2ID = {"non-toxic": 0, "toxic": 1}
-ID2LABEL = {0: "non-toxic", 1: "toxic"}
+LABEL2ID = {"negative": 0, "positive": 1}
+ID2LABEL = {0: "negative", 1: "positive"}
 
 
-class ToxicDataset(Dataset):
-    """PyTorch dataset for toxic comment classification."""
+class SentimentDataset(Dataset):
+    """PyTorch dataset for sentiment classification."""
 
-    def __init__(self, texts, labels, tokenizer, max_length=256):
+    def __init__(self, texts, labels, tokenizer, max_length=128):
         self.encodings = tokenizer(
             texts, truncation=True, padding="max_length",
             max_length=max_length, return_tensors="pt",
@@ -45,17 +40,6 @@ class ToxicDataset(Dataset):
         item = {k: v[idx] for k, v in self.encodings.items()}
         item["labels"] = self.labels[idx]
         return item
-
-
-def load_splits(data_dir):
-    """Load train/val/test CSVs and return texts + labels."""
-    splits = {}
-    for name in ["train", "val", "test"]:
-        df = pd.read_csv(os.path.join(data_dir, f"{name}.csv"))
-        texts = df["clean_comment"].fillna("").tolist()
-        labels = df["toxic"].tolist()
-        splits[name] = (texts, labels)
-    return splits
 
 
 def compute_metrics_hf(eval_pred):
@@ -91,17 +75,17 @@ def build_model_and_tokenizer(model_name, num_labels=2):
     return model, tokenizer
 
 
-def get_training_args(output_dir, num_epochs=3, batch_size=8, learning_rate=2e-5,
-                      gradient_accumulation_steps=2):
-    """Standard training arguments for transformer fine-tuning."""
+def get_training_args(output_dir, num_epochs=3, batch_size=16, learning_rate=1e-5,
+                      weight_decay=1e-3, warmup_steps=800):
+    """Training arguments matching KazSAnDRA paper setup."""
     return TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
-        weight_decay=0.01,
+        weight_decay=weight_decay,
+        warmup_steps=warmup_steps,
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
