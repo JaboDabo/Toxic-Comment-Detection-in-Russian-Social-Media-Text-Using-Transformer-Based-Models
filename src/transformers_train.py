@@ -98,6 +98,28 @@ def get_training_args(output_dir, num_epochs=3, batch_size=16, learning_rate=1e-
     )
 
 
+class WeightedTrainer(Trainer):
+    """Trainer with class-weighted cross-entropy loss for imbalanced datasets."""
+
+    def __init__(self, class_weights=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if class_weights is not None:
+            self.class_weights = torch.tensor(class_weights, dtype=torch.float32)
+        else:
+            self.class_weights = None
+
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+        if self.class_weights is not None:
+            weight = self.class_weights.to(logits.device)
+            loss = torch.nn.functional.cross_entropy(logits, labels, weight=weight)
+        else:
+            loss = torch.nn.functional.cross_entropy(logits, labels)
+        return (loss, outputs) if return_outputs else loss
+
+
 def get_predictions(trainer, dataset):
     """Get predictions, probabilities, and labels from a dataset."""
     output = trainer.predict(dataset)
