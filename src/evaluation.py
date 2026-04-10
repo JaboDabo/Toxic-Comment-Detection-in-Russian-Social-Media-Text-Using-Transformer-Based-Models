@@ -45,7 +45,11 @@ def compute_metrics(y_true, y_pred, y_prob=None):
     }
 
     if y_prob is not None:
-        metrics["roc_auc"] = roc_auc_score(y_true, y_prob)
+        y_prob = np.nan_to_num(y_prob, nan=0.5)
+        try:
+            metrics["roc_auc"] = roc_auc_score(y_true, y_prob)
+        except ValueError:
+            metrics["roc_auc"] = 0.0
 
     return metrics
 

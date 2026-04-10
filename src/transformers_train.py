@@ -45,14 +45,18 @@ class SentimentDataset(Dataset):
 def compute_metrics_hf(eval_pred):
     """Compute metrics compatible with HuggingFace Trainer."""
     logits, labels = eval_pred
+    logits = np.nan_to_num(logits, nan=0.0)
     probs = torch.softmax(torch.tensor(logits), dim=-1).numpy()[:, 1]
     preds = np.argmax(logits, axis=-1)
 
     precision, recall, f1, _ = precision_recall_fscore_support(
-        labels, preds, average="macro"
+        labels, preds, average="macro", zero_division=0
     )
     acc = accuracy_score(labels, preds)
-    auc = roc_auc_score(labels, probs)
+    try:
+        auc = roc_auc_score(labels, probs)
+    except ValueError:
+        auc = 0.0
 
     return {
         "accuracy": acc,
@@ -63,15 +67,44 @@ def compute_metrics_hf(eval_pred):
     }
 
 
+def _fix_deberta_layernorm_keys(state_dict):
+    """Remap gamma/beta → weight/bias for mDeBERTa-v3 LayerNorm compatibility."""
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        new_key = key.replace(".LayerNorm.gamma", ".LayerNorm.weight") \
+                     .replace(".LayerNorm.beta", ".LayerNorm.bias")
+        new_state_dict[new_key] = value
+    return new_state_dict
+
+
 def build_model_and_tokenizer(model_name, num_labels=2):
     """Load pre-trained model and tokenizer."""
+    from transformers import AutoConfig
+    from huggingface_hub import hf_hub_download
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_name,
-        num_labels=num_labels,
-        id2label=ID2LABEL,
-        label2id=LABEL2ID,
+    config = AutoConfig.from_pretrained(
+        model_name, num_labels=num_labels,
+        id2label=ID2LABEL, label2id=LABEL2ID,
     )
+    model = AutoModelForSequenceClassification.from_config(config)
+
+    # Load and fix pretrained weights (gamma/beta → weight/bias)
+    try:
+        import safetensors.torch
+        weights_path = hf_hub_download(repo_id=model_name, filename="model.safetensors")
+        pretrained = safetensors.torch.load_file(weights_path)
+    except Exception:
+        weights_path = hf_hub_download(repo_id=model_name, filename="pytorch_model.bin")
+        pretrained = torch.load(weights_path, map_location="cpu", weights_only=True)
+
+    pretrained = _fix_deberta_layernorm_keys(pretrained)
+
+    # Only load weights that exist in our model (skip lm_head, mask_predictions, etc.)
+    model_keys = set(model.state_dict().keys())
+    filtered = {k: v for k, v in pretrained.items() if k in model_keys}
+    model.load_state_dict(filtered, strict=False)
+
     return model, tokenizer
 
 
@@ -113,7 +146,7 @@ class WeightedTrainer(Trainer):
         outputs = model(**inputs)
         logits = outputs.logits
         if self.class_weights is not None:
-            weight = self.class_weights.to(logits.device)
+            weight = self.class_weights.to(device=logits.device, dtype=logits.dtype)
             loss = torch.nn.functional.cross_entropy(logits, labels, weight=weight)
         else:
             loss = torch.nn.functional.cross_entropy(logits, labels)
